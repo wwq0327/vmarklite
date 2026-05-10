@@ -5,7 +5,7 @@
 A minimal, local-first file viewer for developers. Opens markdown, YAML, JSON, TOML, Mermaid diagrams, SVG, and more — with smart formatting and syntax highlighting.
 
 <p align="center">
-  <img src="website/public/screenshots/ai-workflow.png" alt="VMark Lite" width="800">
+  <img src="website/public/screenshots/editor-main.png" alt="VMark Lite" width="800">
 </p>
 
 VMark Lite is the lightweight preview-only edition of [VMark](https://github.com/xiaolai/vmark). It renders your files beautifully without requiring an internet connection or accounts.
@@ -17,7 +17,7 @@ VMark Lite is the lightweight preview-only edition of [VMark](https://github.com
 ## Features
 
 - **Multi-Format Preview** — Markdown (WYSIWYG), YAML, JSON, TOML, Mermaid, SVG, HTML, and code syntax highlighting
-- **Schema-Aware Views** — GitHub Actions workflows show a visual graph; `Cargo.toml` and `package.json` show dependency trees
+- **Schema-Aware Views** — `Cargo.toml` and `package.json` show dependency trees
 - **CJK Formatting** — Smart spacing rules for Chinese, Japanese, and Korean text
 - **International** — English, 简体中文, 繁體中文, 日本語, 한국어, Deutsch, Español, Français, Italiano, Português
 - **Themes** — White, Paper, Mint, Sepia, Night
