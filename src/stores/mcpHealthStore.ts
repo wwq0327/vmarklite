@@ -1,60 +1,40 @@
 /**
- * MCP Health Store
- *
- * Purpose: Stores MCP server health diagnostics — version, tool/resource counts,
- *   last check time, and error state. Shared between StatusBar (tooltip) and
- *   Settings (MCP status dialog).
- *
- * Pipeline: useMcpHealthCheck hook polls server → setHealth() updates state →
- *   StatusBar and Settings read reactively.
- *
- * @coordinates-with useMcpHealthCheck.ts — performs health check polling
- * @coordinates-with StatusBar component — shows MCP status indicator
- * @module stores/mcpHealthStore
+ * MCP Health Store — Stubbed for read-only preview
  */
 
 import { create } from "zustand";
 
-/** MCP server health diagnostics — version, tool/resource counts, and error state. */
-export interface McpHealthInfo {
-  version: string | null;
-  toolCount: number | null;
-  resourceCount: number | null;
-  tools: string[];
-  lastChecked: Date | null;
-  checkError: string | null;
+interface McpHealth {
+  checkError?: string;
+  // Add other health properties as needed
 }
 
 interface McpHealthState {
-  health: McpHealthInfo;
+  running: boolean;
+  port: number | null;
+  loading: boolean;
+  error: string | null;
+  start: () => void;
+  stop: () => void;
+  health: McpHealth | null;
+  runHealthCheck: () => void;
   isChecking: boolean;
-
-  // Actions
-  setHealth: (health: Partial<McpHealthInfo>) => void;
-  setIsChecking: (checking: boolean) => void;
-  reset: () => void;
+  version: string | null;
+  toolCount: number;
+  resourceCount: number;
 }
 
-const initialHealth: McpHealthInfo = {
-  version: null,
-  toolCount: null,
-  resourceCount: null,
-  tools: [],
-  lastChecked: null,
-  checkError: null,
-};
-
-/** Manages MCP server health state — version info, tool counts, and polling status. Use selectors, not destructuring. */
-export const useMcpHealthStore = create<McpHealthState>((set) => ({
-  health: initialHealth,
+export const useMcpHealthStore = create<McpHealthState>(() => ({
+  running: false,
+  port: null,
+  loading: false,
+  error: null,
+  start: () => {},
+  stop: () => {},
+  health: null,
+  runHealthCheck: () => {},
   isChecking: false,
-
-  setHealth: (health) =>
-    set((state) => ({
-      health: { ...state.health, ...health },
-    })),
-
-  setIsChecking: (isChecking) => set({ isChecking }),
-
-  reset: () => set({ health: initialHealth, isChecking: false }),
+  version: null,
+  toolCount: 0,
+  resourceCount: 0,
 }));

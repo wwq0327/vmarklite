@@ -1,22 +1,13 @@
 /**
- * SVG Block Renderer
+ * SVG Render — Stubbed for read-only preview
  *
- * Validates that a code block's content is well-formed SVG.
- * Unlike mermaid (DSL → SVG), the content IS the SVG — just validate it.
+ * Read-only preview does not use SVG render.
  */
 
-export function renderSvgBlock(content: string): string | null {
-  const trimmed = content.trim();
-  if (!trimmed) return null;
+export function renderSvgBlock(_content: string): string | null {
+  return null;
+}
 
-  // Must start with <svg or <?xml (check for <svg followed by space, >, or /)
-  if (!/^<svg[\s>/]/.test(trimmed) && !trimmed.startsWith("<?xml")) return null;
-
-  const doc = new DOMParser().parseFromString(trimmed, "image/svg+xml");
-  if (doc.querySelector("parsererror")) return null;
-
-  // If it started with <?xml, verify the root element is <svg>
-  if (doc.documentElement.tagName !== "svg") return null;
-
-  return trimmed;
+export function renderSvg(): string {
+  return "";
 }

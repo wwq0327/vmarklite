@@ -1,135 +1,41 @@
 /**
- * Editor Store
+ * Editor Store — Stubbed for read-only preview
  *
- * Purpose: Per-window editor mode flags and view toggles — focus mode,
- *   typewriter mode, source mode, word wrap, line numbers, diagram preview.
- *
- * Key decisions:
- *   - This is the "single-document" editor store from the pre-tabs era.
- *     New code should prefer documentStore (per-tab content) and uiStore
- *     (per-window view flags). This store remains for backwards compat
- *     and for editor mode toggles that are window-scoped, not tab-scoped.
- *   - documentId increments on each loadContent() and reset() to force
- *     Tiptap editor recreation when the underlying document changes.
- *
- * @coordinates-with documentStore.ts — per-tab content (preferred for new code)
- * @coordinates-with uiStore.ts — UI toggles like sidebar, terminal, toolbar
- * @module stores/editorStore
+ * Read-only preview does not use the full editor store.
+ * Provides minimal stubs for components that reference it.
  */
 
 import { create } from "zustand";
 import type { CursorInfo } from "@/types/cursorSync";
 
-
 interface EditorState {
-  content: string;
-  savedContent: string;
-  filePath: string | null;
-  isDirty: boolean;
-  focusModeEnabled: boolean;
-  typewriterModeEnabled: boolean;
   sourceMode: boolean;
   wordWrap: boolean;
-  showLineNumbers: boolean; // Show line numbers in code blocks
-  diagramPreviewEnabled: boolean; // Show diagram preview in source mode
-  documentId: number; // Increments on new document to force editor recreation
-  cursorInfo: CursorInfo | null; // Cursor position for syncing between modes
-  lastAutoSave: number | null; // Timestamp of last auto-save
-}
-
-interface EditorActions {
-  setContent: (content: string) => void;
-  loadContent: (content: string, filePath?: string | null) => void;
-  setFilePath: (path: string | null) => void;
-  markSaved: () => void;
-  markAutoSaved: () => void;
-  toggleFocusMode: () => void;
-  toggleTypewriterMode: () => void;
-  toggleSourceMode: () => void;
-  setSourceMode: (enabled: boolean) => void;
+  showLineNumbers: boolean;
+  focusMode: boolean;
+  typewriterMode: boolean;
+  diagramPreview: boolean;
   toggleWordWrap: () => void;
   toggleLineNumbers: () => void;
+  toggleFocusMode: () => void;
+  toggleTypewriterMode: () => void;
   toggleDiagramPreview: () => void;
-  setCursorInfo: (info: CursorInfo | null) => void;
-  reset: () => void;
+  toggleSourceMode: () => void;
+  setCursorInfo: (cursor: CursorInfo) => void;
 }
 
-const initialState: EditorState = {
-  content: "",
-  savedContent: "",
-  filePath: null,
-  isDirty: false,
-  focusModeEnabled: false,
-  typewriterModeEnabled: false,
+export const useEditorStore = create<EditorState>((set) => ({
   sourceMode: false,
-  wordWrap: true,
+  wordWrap: false,
   showLineNumbers: false,
-  diagramPreviewEnabled: false,
-  documentId: 0,
-  cursorInfo: null,
-  lastAutoSave: null,
-};
-
-/** Manages per-window editor mode flags — focus mode, source mode, word wrap, line numbers, and diagram preview. Use selectors, not destructuring. */
-export const useEditorStore = create<EditorState & EditorActions>((set) => ({
-  ...initialState,
-
-  setContent: (content) =>
-    set((state) => ({
-      content,
-      isDirty: state.savedContent !== content,
-    })),
-
-  loadContent: (content, filePath) =>
-    set((state) => ({
-      content,
-      savedContent: content,
-      filePath: filePath ?? null,
-      isDirty: false,
-      documentId: state.documentId + 1,
-    })),
-
-  setFilePath: (filePath) => set({ filePath }),
-
-  markSaved: () =>
-    set((state) => ({
-      savedContent: state.content,
-      isDirty: false,
-    })),
-
-  markAutoSaved: () =>
-    set((state) => ({
-      savedContent: state.content,
-      isDirty: false,
-      lastAutoSave: Date.now(),
-    })),
-
-  toggleFocusMode: () =>
-    set((state) => ({ focusModeEnabled: !state.focusModeEnabled })),
-
-  toggleTypewriterMode: () =>
-    set((state) => ({ typewriterModeEnabled: !state.typewriterModeEnabled })),
-
-  toggleSourceMode: () =>
-    set((state) => ({ sourceMode: !state.sourceMode })),
-
-  setSourceMode: (enabled: boolean) =>
-    set({ sourceMode: enabled }),
-
-  toggleWordWrap: () =>
-    set((state) => ({ wordWrap: !state.wordWrap })),
-
-  toggleLineNumbers: () =>
-    set((state) => ({ showLineNumbers: !state.showLineNumbers })),
-
-  toggleDiagramPreview: () =>
-    set((state) => ({ diagramPreviewEnabled: !state.diagramPreviewEnabled })),
-
-  setCursorInfo: (cursorInfo) => set({ cursorInfo }),
-
-  reset: () =>
-    set((state) => ({
-      ...initialState,
-      documentId: state.documentId + 1,
-    })),
+  focusMode: false,
+  typewriterMode: false,
+  diagramPreview: false,
+  toggleWordWrap: () => set((s) => ({ wordWrap: !s.wordWrap })),
+  toggleLineNumbers: () => set((s) => ({ showLineNumbers: !s.showLineNumbers })),
+  toggleFocusMode: () => set((s) => ({ focusMode: !s.focusMode })),
+  toggleTypewriterMode: () => set((s) => ({ typewriterMode: !s.typewriterMode })),
+  toggleDiagramPreview: () => set((s) => ({ diagramPreview: !s.diagramPreview })),
+  toggleSourceMode: () => set((s) => ({ sourceMode: !s.sourceMode })),
+  setCursorInfo: () => {},
 }));

@@ -96,9 +96,6 @@
         "role": "Editor"
       }
     ],
-    "externalBin": [
-      "binaries/vmark-mcp-server"
-    ],
     "macOS": {
       "entitlements": "sidecar-entitlements.plist",
       "minimumSystemVersion": "10.15",

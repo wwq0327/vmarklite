@@ -1,56 +1,18 @@
 /**
- * Source Cursor Context Store
+ * Source Cursor Context Store — Stubbed for read-only preview
  *
- * Purpose: Cursor context for Source mode (CodeMirror) — updated on every
- *   selection change, consumed by the universal toolbar and format shortcuts
- *   to show active formatting state in source mode.
- *
- * Key decisions:
- *   - Mirrors tiptapEditorStore pattern but for CodeMirror's EditorView.
- *   - CursorContext tracks: bold, italic, heading level, list type, inside code
- *     block, etc. — parsed from markdown syntax around the cursor.
- *
- * @coordinates-with tiptapEditorStore.ts — same role for WYSIWYG mode
- * @coordinates-with UniversalToolbar — reads context to highlight active buttons
- * @module stores/sourceCursorContextStore
+ * Read-only preview does not use source cursor context.
+ * Provides minimal stubs for UniversalToolbar component.
  */
 
 import { create } from "zustand";
-import type { EditorView } from "@codemirror/view";
-import {
-  type CursorContext,
-  createEmptyCursorContext,
-} from "@/types/cursorContext";
 
 interface SourceCursorContextState {
-  context: CursorContext;
-  editorView: EditorView | null;
+  context: unknown;
+  editorView: unknown;
 }
 
-interface SourceCursorContextActions {
-  setContext: (context: CursorContext, view: EditorView) => void;
-  clearContext: () => void;
-}
-
-type SourceCursorContextStore = SourceCursorContextState &
-  SourceCursorContextActions;
-
-const initialState: SourceCursorContextState = {
-  context: createEmptyCursorContext(),
+export const useSourceCursorContextStore = create<SourceCursorContextState>(() => ({
+  context: null,
   editorView: null,
-};
-
-/** Manages Source mode cursor context — formatting state at cursor position for toolbar display. Use selectors, not destructuring. */
-export const useSourceCursorContextStore = create<SourceCursorContextStore>(
-  (set) => ({
-    ...initialState,
-
-    setContext: (context, view) => {
-      set({ context, editorView: view });
-    },
-
-    clearContext: () => {
-      set(initialState);
-    },
-  })
-);
+}));

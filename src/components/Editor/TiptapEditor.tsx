@@ -36,7 +36,6 @@ import type { Editor as TiptapEditor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { Selection } from "@tiptap/pm/state";
 import { useDocumentActions, useDocumentContent, useDocumentCursorInfo } from "@/hooks/useDocumentState";
-import { useImageContextMenu } from "@/hooks/useImageContextMenu";
 import { useOutlineSync } from "@/hooks/useOutlineSync";
 import { parseMarkdown, serializeMarkdown } from "@/utils/markdownPipeline";
 import { registerActiveWysiwygFlusher } from "@/utils/wysiwygFlush";
@@ -55,11 +54,9 @@ import { useDocumentStore } from "@/stores/documentStore";
 import { useWindowLabel } from "@/contexts/WindowContext";
 import { resolveHardBreakStyle } from "@/utils/linebreaks";
 import { extractTiptapContext } from "@/plugins/formatToolbar/tiptapContext";
-import { useImageDragDrop } from "@/hooks/useImageDragDrop";
 import { handleTableScrollToSelection } from "@/plugins/tableScroll/scrollGuard";
 import { tiptapError, contentSearchLog } from "@/utils/debug";
 import { consumePendingContentSearchNav, openFindBarWithQuery } from "@/hooks/contentSearchNavigation";
-import { ImageContextMenu } from "./ImageContextMenu";
 
 /**
  * Delay before enabling cursor tracking after editor creation.
@@ -143,8 +140,8 @@ interface TiptapEditorInnerProps {
   readOnly?: boolean;
 }
 
-/** WYSIWYG rich-text editor built on Tiptap/ProseMirror with adaptive debounced serialization. */
-export function TiptapEditorInner({ hidden = false, readOnly = false }: TiptapEditorInnerProps) {
+/** WYSIWYG rich-text editor for read-only preview. */
+export function TiptapEditorInner({ hidden = false, readOnly = true }: TiptapEditorInnerProps) {
   const content = useDocumentContent();
   const cursorInfo = useDocumentCursorInfo();
   const { setContent, setCursorInfo, setSelectedText } = useDocumentActions();
@@ -152,7 +149,6 @@ export function TiptapEditorInner({ hidden = false, readOnly = false }: TiptapEd
   const hardBreakStyleOnSave = useSettingsStore((state) => state.markdown.hardBreakStyleOnSave);
   const showLineNumbers = useEditorStore((state) => state.showLineNumbers);
   const cjkLetterSpacing = useSettingsStore((state) => state.appearance.cjkLetterSpacing);
-  const lintEnabled = useSettingsStore((state) => state.markdown.lintEnabled);
   const windowLabel = useWindowLabel();
   /* v8 ignore next -- @preserve reason: runtime window label lookup; windowLabel always resolves in tests */
   const activeTabId = useTabStore((state) => state.activeTabId[windowLabel] ?? undefined);
@@ -184,9 +180,7 @@ export function TiptapEditorInner({ hidden = false, readOnly = false }: TiptapEd
   contentRef.current = content;
 
   const extensions = useMemo(
-    () => createTiptapExtensions({ tabId: activeTabId, lintEnabled }),
-    // tabId and lintEnabled are captured at mount time — editor remounts per tab
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    () => createTiptapExtensions(),
     []
   );
 
@@ -431,15 +425,7 @@ export function TiptapEditorInner({ hidden = false, readOnly = false }: TiptapEd
     () => (hidden ? null : getTiptapEditorView(editor)),
     [editor, hidden]
   );
-  const handleImageContextMenuAction = useImageContextMenu(getEditorView);
   useOutlineSync(getEditorView);
-
-  // Handle image drag-drop from Finder/Explorer
-  useImageDragDrop({
-    tiptapEditor: editor,
-    isSourceMode: false,
-    enabled: !!editor && !hidden,
-  });
 
   // Cleanup all pending timers/RAFs on unmount to prevent memory leaks.
   // Flush any pending content BEFORE cancelling timers to avoid data loss —
@@ -644,11 +630,8 @@ export function TiptapEditorInner({ hidden = false, readOnly = false }: TiptapEd
     .join(" ");
 
   return (
-    <>
-      <div ref={editorContainerRef} className={editorClassName} style={hidden ? { display: "none" } : undefined}>
-        <EditorContent editor={editor} />
-      </div>
-      {!hidden && <ImageContextMenu onAction={handleImageContextMenuAction} />}
-    </>
+    <div ref={editorContainerRef} className={editorClassName} style={hidden ? { display: "none" } : undefined}>
+      <EditorContent editor={editor} />
+    </div>
   );
 }

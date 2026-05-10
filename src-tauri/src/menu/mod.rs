@@ -16,17 +16,11 @@
 //!   - A single `create_localized_menu()` function handles both default and custom
 //!     shortcuts via an `Option<&HashMap>` parameter.
 //!   - All menu labels use `t!()` macro from `rust-i18n` for i18n support.
-//!   - Recent files/workspaces and genies use snapshot Mutexes so menu-click
+//!   - Recent files/workspaces use snapshot Mutexes so menu-click
 //!     handlers always resolve the correct path even if the store changed.
-//!   - Genies submenu is created dynamically inside Edit (not at build time)
-//!     so it can be toggled on/off without rebuilding the entire menu.
 //!   - The accelerator cache is seeded automatically inside `create_localized_menu`
 //!     via the `accel()` closure, so every rebuild leaves a correct baseline
 //!     for the next differential update — callers don't need to seed explicitly.
-//!
-//! Known limitations:
-//!   - Menu structure is duplicated across macOS and non-macOS variants
-//!     due to platform-specific items (App menu, Services, etc.).
 //!
 //! @coordinates-with `menu_events.rs` (dispatches click events to frontend)
 //! @coordinates-with `macos_menu.rs` (applies SF Symbol icons and workarounds)
@@ -44,8 +38,6 @@ use std::sync::Mutex;
 pub const RECENT_FILES_SUBMENU_ID: &str = "recent-files-submenu";
 /// Menu ID for the Open Recent Workspace submenu.
 pub const RECENT_WORKSPACES_SUBMENU_ID: &str = "recent-workspaces-submenu";
-/// Menu ID for the Genies submenu inside Edit.
-pub const GENIES_SUBMENU_ID: &str = "genies-submenu";
 
 /// Stores the recent files list snapshot at menu build time.
 /// This ensures that when a menu item is clicked, we can look up
@@ -54,10 +46,6 @@ pub(crate) static RECENT_FILES_SNAPSHOT: Mutex<Vec<String>> = Mutex::new(Vec::ne
 
 /// Stores the recent workspaces list snapshot at menu build time.
 pub(crate) static RECENT_WORKSPACES_SNAPSHOT: Mutex<Vec<String>> = Mutex::new(Vec::new());
-
-/// Stores genie file paths for lookup when a genie menu item is clicked.
-/// Index corresponds to `genie-item-{index}` menu item IDs.
-pub(crate) static GENIES_SNAPSHOT: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 /// Get the path for a recent file by its menu index.
 /// Returns None if index is out of bounds.
@@ -77,20 +65,11 @@ pub fn get_recent_workspace_path(index: usize) -> Option<String> {
         .and_then(|workspaces| workspaces.get(index).cloned())
 }
 
-/// Get the file path for a genie by its menu index.
-/// Returns None if index is out of bounds.
-pub fn get_genie_path(index: usize) -> Option<String> {
-    GENIES_SNAPSHOT
-        .lock()
-        .ok()
-        .and_then(|paths| paths.get(index).cloned())
-}
-
 // Re-export public items so `menu::create_menu`, `menu::rebuild_menu`, etc. keep working.
 // Wildcard re-exports are required for `#[tauri::command]` functions because the macro
 // generates hidden items (`__cmd__*`) that `generate_handler!` in `lib.rs` must resolve.
 pub use commands::*;
-pub use dynamic::*;
-// Wildcard re-export required: `#[tauri::command]` generates hidden `__cmd__*` items
-// that `generate_handler!` in `lib.rs` must resolve.
 pub use localized::*;
+
+// Re-export the Tauri command wrappers from commands.rs (not the raw dynamic functions)
+pub use commands::{update_recent_files, update_recent_workspaces};

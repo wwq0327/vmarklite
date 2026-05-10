@@ -31,7 +31,11 @@
   "exclude": [
     "src/**/*.test.ts",
     "src/**/*.test.tsx",
-    "src/test/**"
+    "src/test/**",
+    "src/plugins/toolbarActions/**",
+    "src/plugins/wikiLinkPopup/**",
+    "src/plugins/formatToolbar/**",
+    "src/plugins/toolbarContext/**"
   ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

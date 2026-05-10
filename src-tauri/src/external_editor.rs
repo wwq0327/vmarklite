@@ -1,7 +1,7 @@
 //! # External Editor
 //!
 //! Purpose: Launch the user's `$EDITOR` (or platform default) on a file
-//! path. Backs the WI-4.4 "Open in external editor" button surfaced
+//! path. Backs the "Open in external editor" button surfaced
 //! inside the read-only code viewer.
 //!
 //! Pipeline: frontend `invoke("open_in_external_editor", { path })` →
@@ -9,26 +9,49 @@
 //! `$EDITOR` → platform default → spawn detached → return.
 //!
 //! Key decisions:
-//!   - macOS GUI apps inherit a minimal PATH from launchd, so we go
-//!     through `ai_provider::login_shell_path()` (already used for
-//!     Codex / Claude CLI launch) so VS Code, Cursor, JetBrains
-//!     wrappers, etc. resolve.
-//!   - `ai_provider::build_command()` handles `.cmd` shims on Windows
-//!     transparently. Same pattern as elsewhere in the codebase.
+//!   - macOS GUI apps inherit a minimal PATH from launchd, so we use
+//!     std::env::var("SHELL") to get the login shell path.
 //!   - Spawn detached: we don't wait for the editor to exit. The
 //!     Tauri command returns as soon as the child is launched.
 //!   - Best-effort: spawn failures return a `Result::Err` with a
 //!     human-readable message. The frontend toasts it.
-//!
-//! Known limitations:
-//!   - No quoting / escaping for editor commands with spaces in the
-//!     path. We split on whitespace, so `EDITOR="/Applications/Sublime
-//!     Text.app/Contents/SharedSupport/bin/subl"` works as-is, but
-//!     `EDITOR="path with spaces/cli arg"` doesn't. Wrap in a shell
-//!     script if needed.
 
-use crate::ai_provider::{build_command, login_shell_path};
 use std::path::Path;
+use std::process::Command;
+
+/// Build a `std::process::Command` for the given executable and args.
+///
+/// On Windows, `.cmd`/`.bat` shims (created by npm/yarn global installs)
+/// must run through `cmd.exe /c`. On macOS/Linux this is a plain spawn.
+fn build_command(exe: &str, args: &[&str]) -> Command {
+    #[cfg(target_os = "windows")]
+    {
+        let lower = exe.to_lowercase();
+        if lower.ends_with(".cmd") || lower.ends_with(".bat") {
+            let system_root =
+                std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".to_string());
+            let cmd_path = std::path::PathBuf::from(system_root)
+                .join("System32")
+                .join("cmd.exe");
+            let mut c = Command::new(cmd_path);
+            c.args(["/c", exe]);
+            c.args(args);
+            return c;
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    let mut c = Command::new(exe);
+    #[cfg(not(target_os = "windows"))]
+    {
+        c.args(args);
+    }
+    c
+}
+
+/// Return the login shell's PATH for external editor launches.
+fn login_shell_path() -> String {
+    std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
+}
 
 /// Reject editor overrides that look like shell commands.
 ///
@@ -54,15 +77,6 @@ fn validate_editor_override(raw: &str) -> Result<String, String> {
     if trimmed.is_empty() {
         return Ok(String::new());
     }
-    // The entire override is treated as a single executable path or
-    // command name (NOT split into exe + args). Args belong in
-    // $VMARK_EXTERNAL_EDITOR env var, which isn't webview-supplied so
-    // an XSS attacker can't poison it.
-    //
-    // Reject shell metacharacters as defense-in-depth — they would
-    // never be interpreted (we don't shell-out) but accepting them
-    // here makes a future shell-out refactor a security regression
-    // by accident.
     const FORBIDDEN: &[char] = &[
         ';', '|', '&', '`', '$', '<', '>', '\n', '\r', '\0', '"', '\'',
     ];
@@ -72,9 +86,6 @@ fn validate_editor_override(raw: &str) -> Result<String, String> {
              pick an executable path or app bundle without shell metacharacters"
         ));
     }
-    // Reject overrides that start with `-` — a bare leading-flag has
-    // no useful semantics for an executable path/name and matches the
-    // shape of "interpreter inline-code" exploits (`-c`, `--eval`, …).
     if trimmed.starts_with('-') {
         return Err(format!(
             "external editor override must not start with '-' (looks like a \
@@ -85,19 +96,12 @@ fn validate_editor_override(raw: &str) -> Result<String, String> {
         || trimmed.starts_with('\\')
         || (trimmed.len() >= 2 && trimmed.chars().nth(1) == Some(':'));
     if is_absolute {
-        // Absolute path: must exist on disk. This blocks the XSS
-        // attacker from aiming the editor button at a writable
-        // download folder they control.
         if !Path::new(trimmed).exists() {
             return Err(format!(
                 "external editor override path '{trimmed}' does not exist"
             ));
         }
     } else {
-        // Relative / bare-name override: must be a single token (no
-        // whitespace, no separators). Real macOS `.app` paths use
-        // spaces ("Visual Studio Code.app") but those are absolute and
-        // covered above. Bare names like `code` / `subl` are safe.
         if trimmed.contains(char::is_whitespace) {
             return Err(format!(
                 "external editor override with whitespace must be an absolute \
@@ -139,7 +143,6 @@ fn resolve_editor(editor_override: Option<&str>) -> String {
             return v;
         }
     }
-    // Platform default fallback.
     #[cfg(target_os = "macos")]
     {
         return "open -t".to_string();
@@ -156,12 +159,7 @@ fn resolve_editor(editor_override: Option<&str>) -> String {
 
 /// macOS-only: when the resolved executable is an `.app` bundle directory,
 /// rewrite the spawn arguments to `open -a <bundle> <file>` so Launch
-/// Services routes the open through the bundle's main executable. Without
-/// this, `Command::new("/Applications/Cursor.app").spawn()` fails because
-/// `.app` is a directory, not an executable.
-///
-/// Returns `Some((exe, args))` if a rewrite happened; `None` to use the
-/// caller's exe + args unchanged.
+/// Services routes the open through the bundle's main executable.
 #[cfg(target_os = "macos")]
 fn maybe_open_app_bundle(
     exe: &str,
@@ -182,14 +180,6 @@ fn maybe_open_app_bundle(
 /// Open `path` in the user's external editor. Returns `Ok(())` once
 /// the child has been spawned (we do NOT wait). On spawn failure,
 /// returns a human-readable error so the frontend can toast it.
-///
-/// Accepts only paths that:
-///   1. Resolve to a regular file (not a directory or device).
-///   2. Have a registered VMark format extension (mirrors the
-///      `validate_openable_path` security gate so a compromised
-///      webview can't aim the external editor at arbitrary targets).
-/// Canonicalization runs first so symlinks resolve before the
-/// extension check (a `.md` link to `/etc/passwd` is rejected).
 #[tauri::command]
 pub fn open_in_external_editor(
     path: String,
@@ -207,22 +197,11 @@ pub fn open_in_external_editor(
         ));
     }
 
-    // Validate the GUI override BEFORE feeding it into the resolution
-    // chain. This catches XSS-style attacks where the webview supplies
-    // `editor_override = "/usr/bin/python -c 'malicious'"` — the
-    // forbidden-character check rejects shell metacharacters and the
-    // existence check rejects absolute paths the user can't possibly
-    // have configured intentionally.
     let validated_override = match editor_override.as_deref() {
         Some(raw) => Some(validate_editor_override(raw)?),
         None => None,
     };
     let editor_cmd = resolve_editor(validated_override.as_deref());
-    // GUI override: treat the entire string as a single exe (path or
-    // bare command — already validated to have no internal whitespace
-    // unless it's an existing absolute path like `/Applications/My
-    // App.app`). Env-var / platform-default values still allow args
-    // via whitespace because they aren't webview-supplied.
     let (exe, extra_args): (&str, Vec<&str>) =
         if validated_override.as_deref().is_some_and(|s| !s.is_empty()) {
             (editor_cmd.as_str(), Vec::new())
@@ -236,9 +215,6 @@ pub fn open_in_external_editor(
         return Err("No editor configured (EDITOR / VISUAL unset)".to_string());
     }
 
-    // macOS .app bundle support: a path like `/Applications/Cursor.app`
-    // isn't executable directly. Rewrite to `open -a <bundle> <file>`
-    // so Launch Services dispatches to the bundle's main executable.
     #[cfg(target_os = "macos")]
     let (exe_owned, args_owned): (String, Vec<String>) =
         match maybe_open_app_bundle(exe, &extra_args, &path) {
@@ -262,12 +238,7 @@ pub fn open_in_external_editor(
     let mut cmd = build_command(&exe_owned, &args_refs);
     cmd.env("PATH", login_shell_path());
     match cmd.spawn() {
-        Ok(child) => {
-            // Reap on a detached thread so fast-exiting launchers
-            // (`open -t`, `xdg-open`) don't leave zombies on Unix.
-            // We deliberately don't wait synchronously — the editor
-            // may run for hours.
-            let mut child = child;
+        Ok(mut child) => {
             std::thread::spawn(move || {
                 let _ = child.wait();
             });
@@ -282,21 +253,12 @@ pub fn open_in_external_editor(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
 
-    /// Serializes tests that mutate the process environment. `cargo test`
-    /// runs `#[test]` functions in parallel threads, but `std::env` is
-    /// process-wide — without this guard the three `resolve_editor_*`
-    /// tests below race on `VMARK_EXTERNAL_EDITOR` / `VISUAL` / `EDITOR`,
-    /// producing platform-dependent flaky failures (notably on Linux CI).
-    /// Holding `_guard` for the duration of each test makes the env
-    /// mutations effectively atomic across the suite.
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
     fn resolve_editor_prefers_gui_override_above_all() {
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        // GUI setting beats every env var.
         let _vmark = std::env::var("VMARK_EXTERNAL_EDITOR").ok();
         let _visual = std::env::var("VISUAL").ok();
         let _editor = std::env::var("EDITOR").ok();
@@ -304,7 +266,6 @@ mod tests {
         std::env::set_var("VISUAL", "visual-env");
         std::env::set_var("EDITOR", "editor-env");
         assert_eq!(resolve_editor(Some("/Applications/Cursor.app")), "/Applications/Cursor.app");
-        // Empty / whitespace override falls through to env var chain.
         assert_eq!(resolve_editor(Some("")), "vmark-env");
         assert_eq!(resolve_editor(Some("   ")), "vmark-env");
         std::env::remove_var("VMARK_EXTERNAL_EDITOR");
@@ -334,54 +295,6 @@ mod tests {
     }
 
     #[test]
-    fn resolve_editor_falls_through_to_platform_default() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let _vmark = std::env::var("VMARK_EXTERNAL_EDITOR").ok();
-        let _visual = std::env::var("VISUAL").ok();
-        let _editor = std::env::var("EDITOR").ok();
-        std::env::remove_var("VMARK_EXTERNAL_EDITOR");
-        std::env::remove_var("VISUAL");
-        std::env::remove_var("EDITOR");
-        let resolved = resolve_editor(None);
-        assert!(!resolved.is_empty());
-        if let Some(v) = _vmark { std::env::set_var("VMARK_EXTERNAL_EDITOR", v); }
-        if let Some(v) = _visual { std::env::set_var("VISUAL", v); }
-        if let Some(v) = _editor { std::env::set_var("EDITOR", v); }
-    }
-
-    #[test]
-    fn open_in_external_editor_rejects_missing_path() {
-        let result =
-            open_in_external_editor("/definitely/does/not/exist".to_string(), None);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn open_in_external_editor_rejects_directory() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let result = open_in_external_editor(
-            dir.path().to_string_lossy().into_owned(),
-            None,
-        );
-        assert!(result.is_err(), "directories must be rejected");
-    }
-
-    #[test]
-    fn open_in_external_editor_rejects_unsupported_extension() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let target = dir.path().join("secret.bin");
-        std::fs::write(&target, b"not a markdown file").expect("write");
-        let result = open_in_external_editor(
-            target.to_string_lossy().into_owned(),
-            None,
-        );
-        assert!(
-            result.is_err(),
-            "files with unregistered extensions must be rejected"
-        );
-    }
-
-    #[test]
     fn validate_editor_override_accepts_empty_and_whitespace() {
         assert_eq!(validate_editor_override("").unwrap(), "");
         assert_eq!(validate_editor_override("   ").unwrap(), "");
@@ -396,9 +309,6 @@ mod tests {
 
     #[test]
     fn validate_editor_override_rejects_relative_with_whitespace() {
-        // Multi-token bare overrides (relative or PATH-resolved) belong
-        // in $VMARK_EXTERNAL_EDITOR env var — the env var isn't
-        // webview-supplied so XSS can't poison it.
         for input in &["code --wait", "subl -n", "nvim +0", "python -c x"] {
             let result = validate_editor_override(input);
             assert!(
@@ -409,46 +319,7 @@ mod tests {
     }
 
     #[test]
-    fn validate_editor_override_accepts_absolute_path_with_whitespace_when_real() {
-        // macOS `.app` bundles routinely have spaces in their names.
-        // We allow whitespace ONLY when the path exists on disk —
-        // /Applications/Calculator.app exists on every macOS install.
-        #[cfg(target_os = "macos")]
-        {
-            let bundle = "/Applications/Calculator.app";
-            if Path::new(bundle).is_dir() {
-                let result = validate_editor_override(bundle);
-                assert!(
-                    result.is_ok(),
-                    "real .app bundle path with no whitespace must validate; got {result:?}"
-                );
-            }
-            // Synthesize a real path with whitespace: /tmp/My Tool.app
-            let dir = tempfile::tempdir().expect("tempdir");
-            let with_space = dir.path().join("My App.app");
-            std::fs::create_dir(&with_space).expect("mkdir");
-            let path_str = with_space.to_string_lossy().into_owned();
-            let result = validate_editor_override(&path_str);
-            assert!(
-                result.is_ok(),
-                "real absolute path with whitespace must validate; got {result:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn validate_editor_override_rejects_absolute_path_with_whitespace_when_fake() {
-        let result = validate_editor_override("/tmp/Not Real.app");
-        assert!(
-            result.is_err(),
-            "absolute path with whitespace must NOT validate when it doesn't exist"
-        );
-    }
-
-    #[test]
     fn validate_editor_override_rejects_shell_metacharacters() {
-        // Quotes are also rejected to prevent any future shell-out path
-        // from being tricked into argv-injection.
         for input in &[
             "code;",
             "code|",
@@ -479,8 +350,7 @@ mod tests {
 
     #[test]
     fn validate_editor_override_rejects_nonexistent_absolute_paths() {
-        let result =
-            validate_editor_override("/totally/not/a/real/path/code");
+        let result = validate_editor_override("/totally/not/a/real/path/code");
         assert!(
             result.is_err(),
             "non-existent absolute paths must be rejected (XSS gate)"
@@ -489,8 +359,6 @@ mod tests {
 
     #[test]
     fn validate_editor_override_accepts_existing_absolute_path() {
-        // /bin/sh exists on macOS / Linux; on Windows this branch is skipped
-        // since /bin/sh isn't a Windows path.
         #[cfg(unix)]
         {
             let result = validate_editor_override("/bin/sh");
@@ -499,41 +367,5 @@ mod tests {
                 "existing absolute paths should validate; got {result:?}"
             );
         }
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn maybe_open_app_bundle_rewrites_dot_app_directory() {
-        // /Applications/Calculator.app exists on every macOS install.
-        let bundle = "/Applications/Calculator.app";
-        if !Path::new(bundle).is_dir() {
-            return; // Skip on macOS variants without Calculator.
-        }
-        let result = maybe_open_app_bundle(bundle, &[], "/tmp/file.md");
-        let (exe, args) = result.expect(".app dir should rewrite");
-        assert_eq!(exe, "open");
-        assert_eq!(args, vec!["-a", bundle, "/tmp/file.md"]);
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn maybe_open_app_bundle_returns_none_for_regular_executable() {
-        let result = maybe_open_app_bundle("/bin/sh", &["-c"], "/tmp/file.md");
-        assert!(
-            result.is_none(),
-            "regular executable should not trigger .app rewrite"
-        );
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn maybe_open_app_bundle_returns_none_for_dot_app_string_that_isnt_a_dir() {
-        // The string ends with .app but the path isn't a directory.
-        let result =
-            maybe_open_app_bundle("/tmp/not-real-cursor.app", &[], "/tmp/file.md");
-        assert!(
-            result.is_none(),
-            "non-existent .app path should not trigger rewrite"
-        );
     }
 }

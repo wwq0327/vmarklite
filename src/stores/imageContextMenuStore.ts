@@ -1,10 +1,7 @@
 /**
- * Image Context Menu Store
+ * Image Context Menu Store — Stubbed for read-only preview
  *
- * Purpose: State for the image right-click context menu — position, source
- *   URL, and node position for actions like copy/save/resize.
- *
- * @module stores/imageContextMenuStore
+ * Read-only preview does not use image context menus.
  */
 
 import { create } from "zustand";
@@ -12,41 +9,17 @@ import { create } from "zustand";
 interface ImageContextMenuState {
   isOpen: boolean;
   position: { x: number; y: number } | null;
-  imageSrc: string;
-  imageNodePos: number;
-}
-
-interface ImageContextMenuActions {
-  openMenu: (data: {
+  closeMenu: () => void;
+  openMenu: (arg: {
     position: { x: number; y: number };
     imageSrc: string;
     imageNodePos: number;
   }) => void;
-  closeMenu: () => void;
 }
 
-type ImageContextMenuStore = ImageContextMenuState & ImageContextMenuActions;
-
-const initialState: ImageContextMenuState = {
+export const useImageContextMenuStore = create<ImageContextMenuState>(() => ({
   isOpen: false,
   position: null,
-  imageSrc: "",
-  imageNodePos: -1,
-};
-
-/** Manages image right-click context menu state — position, source URL, and node position. Use selectors, not destructuring. */
-export const useImageContextMenuStore = create<ImageContextMenuStore>(
-  (set) => ({
-    ...initialState,
-
-    openMenu: (data) =>
-      set({
-        isOpen: true,
-        position: data.position,
-        imageSrc: data.imageSrc,
-        imageNodePos: data.imageNodePos,
-      }),
-
-    closeMenu: () => set(initialState),
-  })
-);
+  closeMenu: () => {},
+  openMenu: () => {},
+}));

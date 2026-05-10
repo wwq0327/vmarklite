@@ -20,7 +20,6 @@
     "clipboard-manager:allow-write-text",
     "clipboard-manager:allow-read-image",
     "store:default",
-    "mcp-bridge:default",
     "shell:allow-spawn",
     "shell:allow-kill",
     "updater:default",
@@ -28,13 +27,6 @@
     "process:allow-exit",
     "window-state:default",
     "log:default",
-    {
-      "identifier": "shell:allow-execute",
-      "allow": [
-        { "name": "vmark-mcp-server", "sidecar": true },
-        { "name": "vmark-mcp-server", "sidecar": true, "args": ["--health-check"] }
-      ]
-    },
     {
       "identifier": "fs:allow-read-text-file",
       "allow": [

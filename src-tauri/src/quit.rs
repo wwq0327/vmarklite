@@ -23,8 +23,6 @@ use std::sync::{Mutex, LazyLock, atomic::{AtomicBool, Ordering}};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::mcp_server;
-
 static QUIT_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
 // --- Confirm-quit gate (double Cmd+Q) ---
@@ -134,10 +132,9 @@ pub fn request_quit(app: &AppHandle) {
     }
 }
 
-/// Final quit: allow exit, clean up MCP, and terminate the process.
+/// Final quit: allow exit and terminate the process.
 fn finalize_quit(app: &AppHandle) {
     set_exit_allowed(true);
-    mcp_server::cleanup(app);
     app.exit(0);
 }
 

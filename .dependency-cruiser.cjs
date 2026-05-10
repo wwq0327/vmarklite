@@ -82,6 +82,8 @@ module.exports = {
           // markdown-adapter-internal large-file helper — reads
           // largeFileSessionStore by design (WI-1A.6).
           "src/lib/formats/markdownLargeFile",
+          // Link opening — emits open-file events to create new tabs via tabStore
+          "src/utils/linkOpen",
         ],
       },
       to: { path: "^src/(plugins|components|stores)/" },

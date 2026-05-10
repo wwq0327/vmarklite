@@ -1,23 +1,19 @@
 /**
- * Tiptap Extensions Configuration
+ * Tiptap Extensions Configuration — Read-Only Preview Mode
  *
- * Purpose: Assembles the Tiptap extension stack for VMark's WYSIWYG editor —
- * StarterKit overrides, custom marks/nodes, media extensions, and plugin registrations.
+ * Purpose: Assembles the Tiptap extension stack for VMark's WYSIWYG read-only preview.
  *
  * Key decisions:
  *   - StarterKit is used as base but with several nodes overridden
  *     (heading, paragraph, codeBlock, etc.) to add sourceLine attributes
  *   - Extensions are loaded eagerly (not lazy) since WYSIWYG is the default mode
- *   - Link extension configured with openOnClick:false (we have custom popups)
+ *   - Link extension configured with openOnClick:false
  *   - Bold/Italic replaced with CJK-aware versions (lookbehind regexes)
  *   - Custom marks (highlight, underline, sub/superscript) registered here
- *   - Media extensions (block_video, block_audio, video_embed) with NodeViews
- *   - Media popup and handler extensions for editing and drag-drop
+ *   - Only rendering extensions — all editing/paste/search/multi-cursor extensions removed
  *   - Table of contents (tocExtension) for [TOC] inline navigation
  *
- * @coordinates-with sourceEditorExtensions.ts — parallel config for CodeMirror source mode
  * @coordinates-with markdownPipeline/ — schema nodes must match pipeline converters
- * @coordinates-with editorPlugins.tiptap.ts — additional ProseMirror plugins
  * @module utils/tiptapExtensions
  */
 
@@ -36,35 +32,10 @@ import {
 } from "@/plugins/shared/sourceLineNodes";
 import { TableWithScrollWrapper } from "@/plugins/tableScroll";
 import { tableScrollFreezeExtension } from "@/plugins/tableScroll/scrollFreeze";
-import { smartPasteExtension } from "@/plugins/smartPaste/tiptap";
-import { markdownPasteExtension } from "@/plugins/markdownPaste/tiptap";
-import { htmlPasteExtension } from "@/plugins/htmlPaste/tiptap";
-import { codePasteExtension } from "@/plugins/codePaste/tiptap";
-import { markdownCopyExtension } from "@/plugins/markdownCopy/tiptap";
-import { linkPopupExtension } from "@/plugins/linkPopup/tiptap";
-import { linkCreatePopupExtension } from "@/plugins/linkCreatePopup";
-import { inlineNodeEditingExtension } from "@/plugins/inlineNodeEditing/tiptap";
-import { searchExtension } from "@/plugins/search/tiptap";
-import { autoPairExtension } from "@/plugins/autoPair/tiptap";
-import { compositionGuardExtension } from "@/plugins/compositionGuard/tiptap";
-import { focusModeExtension } from "@/plugins/focusMode/tiptap";
-import { typewriterModeExtension } from "@/plugins/typewriterMode/tiptap";
 import { imageViewExtension } from "@/plugins/imageView/tiptap";
 import { blockImageExtension } from "@/plugins/blockImage/tiptap";
-import { blockVideoExtension } from "@/plugins/blockVideo/tiptap";
-import { blockAudioExtension } from "@/plugins/blockAudio/tiptap";
-import { videoEmbedExtension } from "@/plugins/videoEmbed/tiptap";
-import { mediaPopupExtension } from "@/plugins/mediaPopup/tiptap";
-import { mediaHandlerExtension } from "@/plugins/mediaHandler/tiptap";
-import { imageHandlerExtension } from "@/plugins/imageHandler/tiptap";
 import { codePreviewExtension } from "@/plugins/codePreview/tiptap";
-import { blockMathKeymapExtension } from "@/plugins/codePreview/blockMathKeymap";
-import { listContinuationExtension } from "@/plugins/listContinuation/tiptap";
-import { listBackspaceExtension } from "@/plugins/listBackspace/tiptap";
-import { listClickFixExtension } from "@/plugins/listClickFix/tiptap";
 import { tableUIExtension } from "@/plugins/tableUI/tiptap";
-import { blockEscapeExtension } from "@/plugins/blockEscape";
-import { editorKeymapExtension } from "@/plugins/editorPlugins.tiptap";
 import { highlightExtension } from "@/plugins/highlight/tiptap";
 import { subscriptExtension, superscriptExtension } from "@/plugins/subSuperscript/tiptap";
 import { underlineExtension } from "@/plugins/underline/tiptap";
@@ -72,12 +43,8 @@ import { alertBlockExtension } from "@/plugins/alertBlock/tiptap";
 import { detailsBlockExtension, detailsSummaryExtension } from "@/plugins/detailsBlock/tiptap";
 import { taskListItemExtension } from "@/plugins/taskToggle/tiptap";
 import { mathInlineExtension } from "@/plugins/latex/tiptapInlineMath";
-import { mathPopupExtension } from "@/plugins/mathPopup";
 import { footnotePopupExtension } from "@/plugins/footnotePopup/tiptap";
 import { footnoteDefinitionExtension, footnoteReferenceExtension } from "@/plugins/footnotePopup/tiptapNodes";
-import { tabIndentExtension } from "@/plugins/tabIndent/tiptap";
-import { multiCursorExtension } from "@/plugins/multiCursor/tiptap";
-import { aiSuggestionExtension } from "@/plugins/aiSuggestion/tiptap";
 import { AlignedTableCell, AlignedTableHeader } from "@/components/Editor/alignedTableNodes";
 import {
   frontmatterExtension,
@@ -86,30 +53,19 @@ import {
   linkDefinitionExtension,
   wikiLinkExtension,
 } from "@/plugins/markdownArtifacts";
-import { wikiLinkPopupExtension } from "@/plugins/wikiLinkPopup";
 import { CJKLetterSpacing } from "@/plugins/cjkLetterSpacing";
-import { sourcePeekInlineExtension } from "@/plugins/sourcePeekInline";
-import { smartSelectAllExtension } from "@/plugins/smartSelectAll/tiptap";
 import { inlineCodeBoundaryExtension } from "@/plugins/inlineCodeBoundary/tiptap";
 import { CJKBold, CJKItalic } from "@/plugins/markInputRules/tiptap";
-import { textDragDropExtension } from "@/plugins/textDragDrop/tiptap";
 import { tocExtension } from "@/plugins/tableOfContents/tiptap";
-import { LintExtension } from "@/plugins/lint/tiptap";
-import { inactiveSelectionExtension } from "@/plugins/inactiveSelection/tiptap";
-
-export interface TiptapExtensionConfig {
-  /** Tab ID for lint diagnostics (required when lintEnabled is true) */
-  tabId?: string;
-  /** Whether to enable the markdown lint extension */
-  lintEnabled?: boolean;
-}
 
 /**
- * Creates the array of Tiptap extensions for the WYSIWYG editor.
+ * Creates the array of Tiptap extensions for the WYSIWYG read-only preview.
  * This is a pure factory function with no React dependencies.
+ *
+ * Only rendering extensions are included — all editing extensions have been removed
+ * (autoPair, multiCursor, search, paste handlers, link popups, AI suggestions, etc.)
  */
-export function createTiptapExtensions(config: TiptapExtensionConfig = {}): Extensions {
-  const { tabId, lintEnabled } = config;
+export function createTiptapExtensions(): Extensions {
   return [
     StarterKit.configure({
       // We parse/serialize markdown ourselves.
@@ -129,13 +85,6 @@ export function createTiptapExtensions(config: TiptapExtensionConfig = {}): Exte
       horizontalRule: false,
       // Disable StarterKit's link - we use a custom configured one below
       link: false,
-      // Configure undo/redo with increased depth for larger documents
-      undoRedo: {
-        // Increase depth for larger documents (default is 100)
-        depth: 200,
-        // Group changes within 500ms into single undo step (default)
-        newGroupDelay: 500,
-      },
     }),
     // Custom Link extension with excludes to prevent nested links and code inside links
     Link.extend({
@@ -165,7 +114,6 @@ export function createTiptapExtensions(config: TiptapExtensionConfig = {}): Exte
     superscriptExtension,
     underlineExtension,
     mathInlineExtension,
-    mathPopupExtension,
     alertBlockExtension,
     detailsSummaryExtension,
     detailsBlockExtension,
@@ -175,7 +123,6 @@ export function createTiptapExtensions(config: TiptapExtensionConfig = {}): Exte
     frontmatterExtension,
     htmlInlineExtension,
     htmlBlockExtension,
-    wikiLinkPopupExtension,
     footnoteReferenceExtension,
     footnoteDefinitionExtension,
     TableWithScrollWrapper.configure({ resizable: false }),
@@ -184,48 +131,11 @@ export function createTiptapExtensions(config: TiptapExtensionConfig = {}): Exte
     AlignedTableCell,
     tableUIExtension,
     tableScrollFreezeExtension,
-    blockEscapeExtension,
-    compositionGuardExtension,
     blockImageExtension,
-    blockVideoExtension,
-    blockAudioExtension,
-    videoEmbedExtension,
     imageViewExtension,
-    inlineNodeEditingExtension,
     footnotePopupExtension,
-    smartPasteExtension,
-    markdownPasteExtension,
-    htmlPasteExtension,
-    codePasteExtension,
-    markdownCopyExtension,
-    linkPopupExtension,
-    linkCreatePopupExtension,
-    searchExtension,
-    autoPairExtension,
-    focusModeExtension,
-    typewriterModeExtension,
-    imageHandlerExtension,
-    mediaHandlerExtension,
-    mediaPopupExtension,
     codePreviewExtension,
-    blockMathKeymapExtension,
-    listContinuationExtension,
-    listBackspaceExtension,
-    listClickFixExtension,
-    // Note: ListKeymap (backspace, arrow keys in list items) is included via StarterKit
-    editorKeymapExtension,
-    tabIndentExtension,
-    multiCursorExtension,
-    aiSuggestionExtension,
     CJKLetterSpacing,
-    sourcePeekInlineExtension,
-    smartSelectAllExtension,
     inlineCodeBoundaryExtension,
-    textDragDropExtension,
-    inactiveSelectionExtension,
-    // Lint decorations (block-level, WYSIWYG only)
-    ...(lintEnabled && tabId
-      ? [LintExtension.configure({ tabId })]
-      : []),
   ];
 }

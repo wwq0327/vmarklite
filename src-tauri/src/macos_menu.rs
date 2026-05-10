@@ -425,7 +425,6 @@ fn fallback_for_submenu_id(id: Option<&str>) -> Option<&'static str> {
     match id {
         Some(crate::menu::RECENT_FILES_SUBMENU_ID) => Some("doc"),
         Some(crate::menu::RECENT_WORKSPACES_SUBMENU_ID) => Some("folder"),
-        Some(crate::menu::GENIES_SUBMENU_ID) => Some("sparkles"),
         _ => None,
     }
 }

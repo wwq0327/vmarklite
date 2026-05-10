@@ -1,21 +1,13 @@
-import { useDocumentStore } from "@/stores/documentStore";
-import { useUnifiedHistoryStore } from "@/stores/unifiedHistoryStore";
-import { useLintStore } from "@/stores/lintStore";
-import { useAiSuggestionStore } from "@/stores/aiSuggestionStore";
-import { useLargeFileSessionStore } from "@/stores/largeFileSessionStore";
-import { clearPendingContentSearchNav } from "@/hooks/contentSearchNavigation";
-import { clearPendingLintScroll } from "@/hooks/lintNavigation";
-
 /**
- * Clean up all per-tab state when a tab is closed or detached.
- * Must be called from ALL close/detach paths to prevent memory leaks.
+ * Tab Cleanup — Stubbed for read-only preview
+ *
+ * Read-only preview does not use tab cleanup.
  */
-export function cleanupTabState(tabId: string): void {
-  useDocumentStore.getState().removeDocument(tabId);
-  useUnifiedHistoryStore.getState().clearDocument(tabId);
-  useLintStore.getState().clearDiagnostics(tabId);
-  useAiSuggestionStore.getState().clearForTab(tabId);
-  useLargeFileSessionStore.getState().clearForcedSource(tabId);
-  clearPendingContentSearchNav(tabId);
-  clearPendingLintScroll(tabId);
+
+import { useEffect } from "react";
+
+export function useTabCleanup(): void {
+  useEffect(() => {}, []);
 }
+
+export function cleanupTabState(_tabId: string): void {}

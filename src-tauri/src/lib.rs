@@ -31,27 +31,16 @@
 
 rust_i18n::i18n!("locales", fallback = "en");
 
-mod ai_provider;
 mod app_paths;
-mod mcp_bridge;
-mod mcp_config;
-mod mcp_server;
 mod menu;
 mod menu_events;
-mod genies;
 mod quit;
 mod watcher;
 mod window_manager;
 mod workspace;
-mod content_search;
 mod file_ops;
 mod file_tree;
-mod pty;
 mod hot_exit;
-mod pandoc;
-mod tab_transfer;
-mod workflow;
-mod gha_workflow;
 mod quarantine;
 mod external_editor;
 
@@ -326,13 +315,15 @@ async fn atomic_write_file(path: String, content: String) -> Result<(), String> 
     .map_err(|e| format!("Task join error: {}", e))?
 }
 
-/// Return the login shell's PATH — needed by the integrated terminal so that
-/// CLI tools (node, claude, etc.) are discoverable, matching system terminal behavior.
+/// Return the login shell's PATH — needed for shell operations.
 ///
-/// Delegates to `ai_provider::login_shell_path()` which caches the result.
+/// Uses getpwuid_r to find the user's login shell.
 #[tauri::command]
 fn get_login_shell_path() -> String {
-    ai_provider::login_shell_path()
+    login_shell_from_passwd()
+        .filter(|s| shell_path_is_valid(s))
+        .or_else(|| std::env::var("SHELL").ok().filter(|s| shell_path_is_valid(s)))
+        .unwrap_or_else(|| "/bin/sh".to_string())
 }
 
 /// Return the user's default shell.
@@ -432,26 +423,6 @@ fn windows_absolute_cmd() -> String {
     cmd.to_string_lossy().into_owned()
 }
 
-/// Resolve absolute path for a shell executable using `which`/`where`.
-/// Returns `None` if the executable is not found.
-fn resolve_windows_shell(name: &str) -> Option<String> {
-    let output = ai_provider::which_command()
-        .arg(name)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    // where.exe may return multiple lines; take the first (highest priority) one
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let first_line = stdout.lines().next()?.trim().to_string();
-    if first_line.is_empty() {
-        None
-    } else {
-        Some(first_line)
-    }
-}
-
 /// Check if a shell path exists and is executable (for validating env vars).
 fn shell_path_is_valid(path: &str) -> bool {
     let p = std::path::Path::new(path);
@@ -462,49 +433,34 @@ fn shell_path_is_valid(path: &str) -> bool {
 ///
 /// - macOS/Linux: reads `/etc/shells`, filters to existing executable paths, deduplicates.
 ///   Always includes the user's login shell (via `getpwuid` → `$SHELL` fallback).
-/// - Windows: checks for known shell executables via `where.exe` (absolute path).
 #[tauri::command]
 fn list_available_shells() -> Vec<String> {
     let mut shells = Vec::new();
 
-    if cfg!(target_os = "windows") {
-        for candidate in &["powershell.exe", "pwsh.exe", "cmd.exe"] {
-            if let Some(abs_path) = resolve_windows_shell(candidate) {
-                shells.push(abs_path);
+    // Read /etc/shells, filter to existing executable files
+    if let Ok(content) = std::fs::read_to_string("/etc/shells") {
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+            let path = std::path::Path::new(trimmed);
+            if path.is_file() && is_executable(path) {
+                shells.push(trimmed.to_string());
             }
         }
-        // Always include %COMSPEC%
-        if let Ok(comspec) = std::env::var("COMSPEC") {
-            if !shells.iter().any(|s| s.eq_ignore_ascii_case(&comspec)) {
-                shells.insert(0, comspec);
-            }
-        }
-    } else {
-        // Read /etc/shells, filter to existing executable files
-        if let Ok(content) = std::fs::read_to_string("/etc/shells") {
-            for line in content.lines() {
-                let trimmed = line.trim();
-                if trimmed.is_empty() || trimmed.starts_with('#') {
-                    continue;
-                }
-                let path = std::path::Path::new(trimmed);
-                if path.is_file() && is_executable(path) {
-                    shells.push(trimmed.to_string());
-                }
-            }
-        }
-        // Always include the user's login shell (passwd → $SHELL fallback)
-        let user_shell = login_shell_from_passwd()
-            .or_else(|| std::env::var("SHELL").ok());
-        if let Some(shell) = user_shell {
-            if !shells.contains(&shell) {
-                shells.insert(0, shell);
-            }
-        }
-        // Deduplicate while preserving order
-        let mut seen = std::collections::HashSet::new();
-        shells.retain(|s| seen.insert(s.clone()));
     }
+    // Always include the user's login shell (passwd → $SHELL fallback)
+    let user_shell = login_shell_from_passwd()
+        .or_else(|| std::env::var("SHELL").ok());
+    if let Some(shell) = user_shell {
+        if !shells.contains(&shell) {
+            shells.insert(0, shell);
+        }
+    }
+    // Deduplicate while preserving order
+    let mut seen = std::collections::HashSet::new();
+    shells.retain(|s| seen.insert(s.clone()));
 
     shells
 }
@@ -603,18 +559,11 @@ pub fn run() {
                 )
                 .build(),
         )
-        .manage(workflow::commands::WorkflowRunnerState {
-            running: std::sync::atomic::AtomicBool::new(false),
-            cancel_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            approvals: std::sync::Arc::new(workflow::approval::ApprovalRegistry::new()),
-        })
         .invoke_handler(tauri::generate_handler![
             get_pending_file_opens,
             external_editor::open_in_external_editor,
             menu::update_recent_files,
             menu::update_recent_workspaces,
-            menu::refresh_genies_menu,
-            menu::hide_genies_menu,
             menu::rebuild_menu,
             menu::update_menu_accelerators,
             menu::set_locale,
@@ -635,21 +584,6 @@ pub fn run() {
             workspace::read_workspace_config,
             workspace::write_workspace_config,
             quarantine::strip_workspace_quarantine_cmd,
-            mcp_server::mcp_bridge_start,
-            mcp_server::mcp_bridge_stop,
-            mcp_server::mcp_server_start,
-            mcp_server::mcp_server_stop,
-            mcp_server::mcp_server_status,
-            mcp_server::mcp_sidecar_health,
-            mcp_server::mcp_bridge_client_count,
-            mcp_server::mcp_bridge_connected_clients,
-            mcp_bridge::commands::mcp_bridge_respond,
-            mcp_bridge::commands::mcp_bridge_heartbeat,
-            mcp_config::commands::mcp_config_get_status,
-            mcp_config::commands::mcp_config_diagnose,
-            mcp_config::commands::mcp_config_preview,
-            mcp_config::commands::mcp_config_install,
-            mcp_config::commands::mcp_config_uninstall,
             hot_exit::commands::hot_exit_capture,
             hot_exit::commands::hot_exit_restore,
             hot_exit::commands::hot_exit_inspect_session,
@@ -657,29 +591,9 @@ pub fn run() {
             hot_exit::commands::hot_exit_restore_multi_window,
             hot_exit::commands::hot_exit_get_window_state,
             hot_exit::commands::hot_exit_window_restore_complete,
-            tab_transfer::detach_tab_to_new_window,
-            tab_transfer::transfer_tab_to_existing_window,
-            tab_transfer::claim_tab_transfer,
-            tab_transfer::find_drop_target_window,
-            tab_transfer::focus_existing_window,
-            tab_transfer::remove_tab_from_window,
             get_default_shell,
             get_login_shell_path,
             list_available_shells,
-            genies::commands::get_genies_dir,
-            genies::commands::list_genies,
-            genies::commands::read_genie,
-            workflow::commands::run_workflow,
-            workflow::commands::cancel_workflow,
-            workflow::commands::respond_workflow_approval,
-            gha_workflow::commands::gha_lint,
-            gha_workflow::commands::gha_fetch_action_yml,
-            ai_provider::detect_ai_providers,
-            ai_provider::run_ai_prompt,
-            ai_provider::read_env_api_keys,
-            ai_provider::test_api_key,
-            ai_provider::list_models,
-            ai_provider::validate_model,
             #[cfg(debug_assertions)]
             debug_log,
             write_temp_html,
@@ -696,25 +610,12 @@ pub fn run() {
             pdf_export::commands::export_pdf,
             #[cfg(target_os = "macos")]
             pdf_export::commands::print_document,
-            pandoc::commands::detect_pandoc,
-            pandoc::commands::export_via_pandoc,
-            content_search::search_workspace_content,
-            pty::pty_spawn,
-            pty::pty_start,
-            pty::pty_write,
-            pty::pty_resize,
-            pty::pty_kill,
-            pty::pty_close,
-            pty::pty_pause,
-            pty::pty_resume,
         ])
         .setup(|app| {
-            app.manage(pty::PtyState::default());
             let menu = menu::localized::create_localized_menu(app.handle(), None)?;
             app.set_menu(menu)?;
 
             // Disable App Nap so the webview stays active when backgrounded
-            // (prevents MCP bridge timeouts from suspended JS)
             #[cfg(target_os = "macos")]
             app_nap::disable_app_nap();
 
@@ -724,11 +625,6 @@ pub fn run() {
 
             // Best-effort cleanup of legacy ~/.vmark/ directory
             app_paths::cleanup_legacy_home_dir(app.handle());
-
-            // Install default AI genies (no-op if already present)
-            if let Err(e) = genies::install_default_genies(app.handle()) {
-                log::warn!("[Tauri] Failed to install default genies: {}", e);
-            }
 
             // Windows/Linux: handle files passed as CLI arguments
             // (macOS uses RunEvent::Opened from Finder instead)
@@ -835,7 +731,6 @@ pub fn run() {
                 } => {
                     quit::handle_window_destroyed(app, &label);
                     menu_events::clear_window_ready(&label);
-                    tab_transfer::clear_unclaimed_transfer(&label);
                 }
                 // macOS: Clicking dock icon when no windows visible -> create main window
                 #[cfg(target_os = "macos")]
