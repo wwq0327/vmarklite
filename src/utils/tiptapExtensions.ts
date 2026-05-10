@@ -67,7 +67,8 @@ export function createTiptapExtensions(): Extensions {
     StarterKit.configure({
       // We parse/serialize markdown ourselves.
       // Keep Tiptap defaults for schema names and commands.
-      listItem: false,
+      // Keep listItem from StarterKit — BulletList/OrderedList need it as content expression 'listItem+'
+      // Only disable nodes/marks we replace with custom sourceLine or CJK versions
       underline: false,
       // Disable bold/italic — replaced with CJK-aware versions below
       bold: false,

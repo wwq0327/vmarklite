@@ -58,7 +58,7 @@ export function createExportExtensions(): Extensions {
   return [
     StarterKit.configure({
       // Disable nodes replaced with sourceLine-enabled versions
-      listItem: false,
+      // Keep listItem — BulletList/OrderedList need it as content expression 'listItem+'
       underline: false,
       heading: false,
       paragraph: false,
