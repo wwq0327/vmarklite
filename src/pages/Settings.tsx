@@ -16,8 +16,6 @@ import {
   FileText,
   Files,
   Keyboard,
-  Plug,
-  SquareTerminal,
   Info,
 } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
@@ -33,12 +31,10 @@ import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { EditorSettings } from "./settings/EditorSettings";
 import { FilesImagesSettings } from "./settings/FilesImagesSettings";
 import { FormatsSettings } from "./settings/FormatsSettings";
-import { IntegrationsSettings } from "./settings/IntegrationsSettings";
 import { LanguageSettings } from "./settings/LanguageSettings";
 import { MarkdownSettings } from "./settings/MarkdownSettings";
 import { ShortcutsSettings } from "./settings/ShortcutsSettings";
 import { AboutSettings } from "./settings/AboutSettings";
-import { TerminalSettings } from "./settings/TerminalSettings";
 import { AdvancedSettings } from "./settings/AdvancedSettings";
 
 // Hook to handle Cmd+W for settings window
@@ -82,11 +78,9 @@ type Section =
   | "editor"
   | "files"
   | "formats"
-  | "integrations"
   | "language"
   | "markdown"
   | "shortcuts"
-  | "terminal"
   | "advanced";
 
 interface NavItemProps {
@@ -119,18 +113,16 @@ const navConfig = [
   { id: "editor" as const, icon: Type },
   { id: "files" as const, icon: FolderOpen },
   { id: "formats" as const, icon: Files },
-  { id: "integrations" as const, icon: Plug },
   { id: "language" as const, icon: Languages },
   { id: "markdown" as const, icon: FileText },
   { id: "shortcuts" as const, icon: Keyboard },
-  { id: "terminal" as const, icon: SquareTerminal },
   { id: "about" as const, icon: Info },
 ] as const;
 
 // Valid section IDs for URL param validation
 const validSections = new Set<string>([
-  "about", "appearance", "editor", "files", "formats", "integrations", "language",
-  "markdown", "shortcuts", "terminal", "advanced"
+  "about", "appearance", "editor", "files", "formats", "language",
+  "markdown", "shortcuts", "advanced"
 ]);
 
 function isValidSection(value: string): value is Section {
@@ -237,11 +229,9 @@ export function SettingsPage() {
           {section === "editor" && <EditorSettings />}
           {section === "files" && <FilesImagesSettings />}
           {section === "formats" && <FormatsSettings />}
-          {section === "integrations" && <IntegrationsSettings />}
           {section === "language" && <LanguageSettings />}
           {section === "markdown" && <MarkdownSettings />}
           {section === "shortcuts" && <ShortcutsSettings />}
-          {section === "terminal" && <TerminalSettings />}
           {section === "advanced" && <AdvancedSettings />}
         </div>
       </div>
