@@ -38,10 +38,8 @@ import { codePreviewExtension } from "@/plugins/codePreview/tiptap";
 import { tableUIExtension } from "@/plugins/tableUI/tiptap";
 import { highlightExtension } from "@/plugins/highlight/tiptap";
 import { subscriptExtension, superscriptExtension } from "@/plugins/subSuperscript/tiptap";
-import { underlineExtension } from "@/plugins/underline/tiptap";
 import { alertBlockExtension } from "@/plugins/alertBlock/tiptap";
 import { detailsBlockExtension, detailsSummaryExtension } from "@/plugins/detailsBlock/tiptap";
-import { taskListItemExtension } from "@/plugins/taskToggle/tiptap";
 import { mathInlineExtension } from "@/plugins/latex/tiptapInlineMath";
 import { footnotePopupExtension } from "@/plugins/footnotePopup/tiptap";
 import { footnoteDefinitionExtension, footnoteReferenceExtension } from "@/plugins/footnotePopup/tiptapNodes";
@@ -54,7 +52,6 @@ import {
   wikiLinkExtension,
 } from "@/plugins/markdownArtifacts";
 import { CJKLetterSpacing } from "@/plugins/cjkLetterSpacing";
-import { inlineCodeBoundaryExtension } from "@/plugins/inlineCodeBoundary/tiptap";
 import { CJKBold, CJKItalic } from "@/plugins/markInputRules/tiptap";
 import { tocExtension } from "@/plugins/tableOfContents/tiptap";
 
@@ -108,11 +105,9 @@ export function createTiptapExtensions(): Extensions {
     BulletListWithSourceLine,
     OrderedListWithSourceLine,
     HorizontalRuleWithSourceLine,
-    taskListItemExtension,
     highlightExtension,
     subscriptExtension,
     superscriptExtension,
-    underlineExtension,
     mathInlineExtension,
     alertBlockExtension,
     detailsSummaryExtension,
@@ -136,6 +131,5 @@ export function createTiptapExtensions(): Extensions {
     footnotePopupExtension,
     codePreviewExtension,
     CJKLetterSpacing,
-    inlineCodeBoundaryExtension,
   ];
 }

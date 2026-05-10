@@ -41,8 +41,6 @@ mod workspace;
 mod file_ops;
 mod file_tree;
 mod hot_exit;
-mod quarantine;
-mod external_editor;
 
 #[cfg(target_os = "macos")]
 mod app_nap;
@@ -50,10 +48,6 @@ mod app_nap;
 mod macos_menu;
 #[cfg(target_os = "macos")]
 mod dock_recent;
-#[cfg(target_os = "macos")]
-mod cli_install;
-#[cfg(target_os = "macos")]
-mod pdf_export;
 
 use sha2::{Digest, Sha256};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -315,172 +309,6 @@ async fn atomic_write_file(path: String, content: String) -> Result<(), String> 
     .map_err(|e| format!("Task join error: {}", e))?
 }
 
-/// Return the login shell's PATH — needed for shell operations.
-///
-/// Uses getpwuid_r to find the user's login shell.
-#[tauri::command]
-fn get_login_shell_path() -> String {
-    login_shell_from_passwd()
-        .filter(|s| shell_path_is_valid(s))
-        .or_else(|| std::env::var("SHELL").ok().filter(|s| shell_path_is_valid(s)))
-        .unwrap_or_else(|| "/bin/sh".to_string())
-}
-
-/// Return the user's default shell.
-///
-/// Fallback chain:
-/// - macOS/Linux: `getpwuid(getuid())` → `$SHELL` → `/bin/sh`
-///   `getpwuid` reads the login shell from the user database, which is
-///   reliable even in GUI apps where `$SHELL` may not be set.
-/// - Windows: `%COMSPEC%` → `%SystemRoot%\System32\cmd.exe` → `C:\Windows\System32\cmd.exe`
-#[tauri::command]
-fn get_default_shell() -> String {
-    if cfg!(target_os = "windows") {
-        // Prefer %COMSPEC%, fall back to absolute cmd.exe path (never bare "cmd.exe")
-        std::env::var("COMSPEC")
-            .ok()
-            .filter(|v| shell_path_is_valid(v))
-            .unwrap_or_else(windows_absolute_cmd)
-    } else {
-        login_shell_from_passwd()
-            .filter(|s| shell_path_is_valid(s))
-            .or_else(|| std::env::var("SHELL").ok().filter(|s| shell_path_is_valid(s)))
-            .unwrap_or_else(|| "/bin/sh".to_string())
-    }
-}
-
-/// Read login shell from the Unix user database via `getpwuid_r`.
-///
-/// Returns `None` if the lookup fails or the shell field is empty.
-/// Retries with a larger buffer on `ERANGE` (large NSS entries).
-#[cfg(unix)]
-fn login_shell_from_passwd() -> Option<String> {
-    use std::ffi::CStr;
-    use std::mem::MaybeUninit;
-
-    // SAFETY: getuid() is always safe and returns the real user ID.
-    let uid = unsafe { libc::getuid() };
-
-    // Start with sysconf hint, fall back to 1024
-    let init_size = unsafe { libc::sysconf(libc::_SC_GETPW_R_SIZE_MAX) };
-    let mut buf_size = if init_size > 0 { init_size as usize } else { 1024 };
-
-    loop {
-        let mut pwd = MaybeUninit::<libc::passwd>::uninit();
-        let mut result: *mut libc::passwd = std::ptr::null_mut();
-        let mut buf = vec![0u8; buf_size];
-
-        // SAFETY: getpwuid_r is the reentrant (thread-safe) variant.
-        // We pass valid pointers and a buffer of known size.
-        let rc = unsafe {
-            libc::getpwuid_r(
-                uid,
-                pwd.as_mut_ptr(),
-                buf.as_mut_ptr() as *mut libc::c_char,
-                buf.len(),
-                &mut result,
-            )
-        };
-
-        if rc == libc::ERANGE && buf_size < 1_048_576 {
-            // Buffer too small — double and retry (cap at 1 MB)
-            buf_size *= 2;
-            continue;
-        }
-
-        if rc != 0 || result.is_null() {
-            return None;
-        }
-
-        // SAFETY: result is non-null and points to initialized pwd.
-        let pwd = unsafe { pwd.assume_init() };
-        if pwd.pw_shell.is_null() {
-            return None;
-        }
-
-        // SAFETY: pw_shell is a valid C string from the passwd entry.
-        let shell = unsafe { CStr::from_ptr(pwd.pw_shell) };
-        let shell_str = shell.to_str().ok()?.to_string();
-
-        return if shell_str.is_empty() { None } else { Some(shell_str) };
-    }
-}
-
-#[cfg(not(unix))]
-fn login_shell_from_passwd() -> Option<String> {
-    None
-}
-
-/// Build an absolute path to `cmd.exe` using `%SystemRoot%` (or fallback).
-/// Never returns a bare "cmd.exe" that could resolve via CWD/PATH.
-fn windows_absolute_cmd() -> String {
-    let sys_root = std::env::var("SystemRoot")
-        .or_else(|_| std::env::var("WINDIR"))
-        .unwrap_or_else(|_| r"C:\Windows".to_string());
-    let cmd = std::path::PathBuf::from(&sys_root)
-        .join("System32")
-        .join("cmd.exe");
-    cmd.to_string_lossy().into_owned()
-}
-
-/// Check if a shell path exists and is executable (for validating env vars).
-fn shell_path_is_valid(path: &str) -> bool {
-    let p = std::path::Path::new(path);
-    p.is_file() && is_executable(p)
-}
-
-/// List available shells on the system.
-///
-/// - macOS/Linux: reads `/etc/shells`, filters to existing executable paths, deduplicates.
-///   Always includes the user's login shell (via `getpwuid` → `$SHELL` fallback).
-#[tauri::command]
-fn list_available_shells() -> Vec<String> {
-    let mut shells = Vec::new();
-
-    // Read /etc/shells, filter to existing executable files
-    if let Ok(content) = std::fs::read_to_string("/etc/shells") {
-        for line in content.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() || trimmed.starts_with('#') {
-                continue;
-            }
-            let path = std::path::Path::new(trimmed);
-            if path.is_file() && is_executable(path) {
-                shells.push(trimmed.to_string());
-            }
-        }
-    }
-    // Always include the user's login shell (passwd → $SHELL fallback)
-    let user_shell = login_shell_from_passwd()
-        .or_else(|| std::env::var("SHELL").ok());
-    if let Some(shell) = user_shell {
-        if !shells.contains(&shell) {
-            shells.insert(0, shell);
-        }
-    }
-    // Deduplicate while preserving order
-    let mut seen = std::collections::HashSet::new();
-    shells.retain(|s| seen.insert(s.clone()));
-
-    shells
-}
-
-/// Check if a file is executable by the current user (Unix: `access(X_OK)`).
-#[cfg(unix)]
-fn is_executable(path: &std::path::Path) -> bool {
-    use std::ffi::CString;
-    let Ok(c_path) = CString::new(path.as_os_str().as_encoded_bytes()) else {
-        return false;
-    };
-    // SAFETY: c_path is a valid null-terminated C string.
-    unsafe { libc::access(c_path.as_ptr(), libc::X_OK) == 0 }
-}
-
-#[cfg(not(unix))]
-fn is_executable(_path: &std::path::Path) -> bool {
-    true // Windows executability is determined by extension, not permissions
-}
-
 /// Register a file with macOS Dock recent documents
 #[cfg(target_os = "macos")]
 #[tauri::command]
@@ -561,7 +389,6 @@ pub fn run() {
         )
         .invoke_handler(tauri::generate_handler![
             get_pending_file_opens,
-            external_editor::open_in_external_editor,
             menu::update_recent_files,
             menu::update_recent_workspaces,
             menu::rebuild_menu,
@@ -583,7 +410,6 @@ pub fn run() {
             workspace::open_folder_dialog,
             workspace::read_workspace_config,
             workspace::write_workspace_config,
-            quarantine::strip_workspace_quarantine_cmd,
             hot_exit::commands::hot_exit_capture,
             hot_exit::commands::hot_exit_restore,
             hot_exit::commands::hot_exit_inspect_session,
@@ -591,25 +417,12 @@ pub fn run() {
             hot_exit::commands::hot_exit_restore_multi_window,
             hot_exit::commands::hot_exit_get_window_state,
             hot_exit::commands::hot_exit_window_restore_complete,
-            get_default_shell,
-            get_login_shell_path,
-            list_available_shells,
             #[cfg(debug_assertions)]
             debug_log,
             write_temp_html,
             atomic_write_file,
             #[cfg(target_os = "macos")]
             register_dock_recent,
-            #[cfg(target_os = "macos")]
-            cli_install::cli_install_status,
-            #[cfg(target_os = "macos")]
-            cli_install::cli_install,
-            #[cfg(target_os = "macos")]
-            cli_install::cli_uninstall,
-            #[cfg(target_os = "macos")]
-            pdf_export::commands::export_pdf,
-            #[cfg(target_os = "macos")]
-            pdf_export::commands::print_document,
         ])
         .setup(|app| {
             let menu = menu::localized::create_localized_menu(app.handle(), None)?;
@@ -680,15 +493,6 @@ pub fn run() {
                 // Settings and other non-document windows close normally
             }
         });
-
-    // Tauri MCP bridge plugin for automation/screenshots (dev only)
-    #[cfg(debug_assertions)]
-    {
-        builder = builder.plugin(
-            tauri_plugin_mcp_bridge::Builder::new()
-                .build(),
-        );
-    }
 
     // CRITICAL: Use .build().run() pattern for app-level event handling
     builder

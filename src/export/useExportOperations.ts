@@ -12,7 +12,7 @@ import { createRoot } from "react-dom/client";
 import React from "react";
 
 import { ExportSurface, type ExportSurfaceRef } from "./ExportSurface";
-import { exportWarn, exportError, pdfError, printError } from "@/utils/debug";
+import { exportWarn, exportError, printError } from "@/utils/debug";
 import i18n from "@/i18n";
 import { exportHtml } from "./htmlExport";
 import { waitForAssets } from "./waitForAssets";
@@ -258,47 +258,11 @@ export async function exportToPdf(options: ExportToPdfOptions): Promise<void> {
 /**
  * Export PDF: opens a preview dialog with Paged.js pagination, then exports
  * via WKWebView's native createPDF API (macOS only).
+ *
+ * PDF export removed for VMark Lite.
  */
-export async function exportToPdfNative(options: ExportToPdfOptions): Promise<void> {
-  const { markdown, defaultName, sourceFilePath } = options;
-
-  const trimmedContent = markdown.trim();
-  if (!trimmedContent) {
-    toast.error(i18n.t("dialog:toast.exportNoContent"));
-    return;
-  }
-
-  if (!isMacPlatform()) {
-    toast.error(i18n.t("dialog:toast.nativePdfRequiresMac"));
-    return;
-  }
-
-  try {
-    // Render markdown to HTML (always light theme)
-    const renderedHtml = await renderMarkdownToHtml(markdown, true);
-
-    // Resolve images to data URIs for self-contained HTML
-    const { resolveResources, getDocumentBaseDir } = await import(
-      "./resourceResolver"
-    );
-    const baseDir = sourceFilePath
-      ? await getDocumentBaseDir(sourceFilePath)
-      : "/";
-    const { html: resolvedHtml } = await resolveResources(renderedHtml, {
-      baseDir,
-      mode: "single",
-    });
-
-    // Open PDF export in native window
-    const { openPdfExportWindow } = await import("@/utils/pdfExportWindow");
-    await openPdfExportWindow({
-      renderedHtml: resolvedHtml,
-      defaultName,
-    });
-  } catch (error) {
-    pdfError("Failed to open PDF dialog:", error);
-    toast.error(i18n.t("dialog:toast.failedToPreparePdf"));
-  }
+export async function exportToPdfNative(_options: ExportToPdfOptions): Promise<void> {
+  toast.error("PDF export not available in VMark Lite");
 }
 
 /**

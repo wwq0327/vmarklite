@@ -10,7 +10,6 @@ import { TitleBar } from "@/components/TitleBar";
 
 // Lazy-load page routes so non-document windows don't evaluate stores they don't need.
 const SettingsPage = lazy(() => import("@/pages/Settings").then(m => ({ default: m.SettingsPage })));
-const PdfExportPage = lazy(() => import("@/pages/PdfExportPage").then(m => ({ default: m.PdfExportPage })));
 import { WindowProvider, useIsDocumentWindow, useWindowLabel } from "@/contexts/WindowContext";
 import { appError } from "@/utils/debug";
 
@@ -220,7 +219,6 @@ function App() {
         <Routes>
           <Route path="/" element={<MainLayout />} />
           <Route path="/settings" element={<Suspense fallback={null}><SettingsPage /></Suspense>} />
-          <Route path="/pdf-export" element={<Suspense fallback={null}><PdfExportPage /></Suspense>} />
         </Routes>
         <Toaster
           position="top-center"

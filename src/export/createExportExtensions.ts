@@ -14,10 +14,8 @@ import {
 import { TableWithScrollWrapper } from "@/plugins/tableScroll";
 import { highlightExtension } from "@/plugins/highlight/tiptap";
 import { subscriptExtension, superscriptExtension } from "@/plugins/subSuperscript/tiptap";
-import { underlineExtension } from "@/plugins/underline/tiptap";
 import { alertBlockExtension } from "@/plugins/alertBlock/tiptap";
 import { detailsBlockExtension, detailsSummaryExtension } from "@/plugins/detailsBlock/tiptap";
-import { taskListItemExtension } from "@/plugins/taskToggle/tiptap";
 import { mathInlineExtension } from "@/plugins/latex/tiptapInlineMath";
 import { footnoteDefinitionExtension, footnoteReferenceExtension } from "@/plugins/footnotePopup/tiptapNodes";
 import { AlignedTableCell, AlignedTableHeader } from "@/components/Editor/alignedTableNodes";
@@ -89,13 +87,10 @@ export function createExportExtensions(): Extensions {
     BulletListWithSourceLine,
     OrderedListWithSourceLine,
     HorizontalRuleWithSourceLine,
-    // Task lists
-    taskListItemExtension,
     // Marks
     highlightExtension,
     subscriptExtension,
     superscriptExtension,
-    underlineExtension,
     // Math (inline) - block math handled by codePreviewExtension
     mathInlineExtension,
     // Custom blocks
