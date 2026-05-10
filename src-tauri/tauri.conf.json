@@ -36,7 +36,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "createUpdaterArtifacts": true,
+    "createUpdaterArtifacts": false,
     "shortDescription": "Plain-text workspace for humans and AI",
     "longDescription": "VMark is the plain-text workspace where humans and AI collaborate. Both parties read and write the same artifacts — markdown, YAML, JSON, TOML, Mermaid, SVG, HTML, code — directly. Schema-aware previews render the right view for known artifacts (GitHub Actions workflows, Cargo.toml, package.json, pyproject.toml).",
     "icon": [
@@ -107,7 +107,6 @@
       "requireLiteralLeadingDot": false
     },
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZFQ0NGRjU5RUZBM0RBMDIKUldRQzJxUHZXZi9NL2k3RU9JbGg5amYxS2FVVFNGU0hTUWdEbUppcHpxTTRQMThkOVlKL0F3MUcK",
       "endpoints": [
         "https://log.vmark.app/update/latest.json?target={{target}}&arch={{arch}}&version={{current_version}}"
       ]
