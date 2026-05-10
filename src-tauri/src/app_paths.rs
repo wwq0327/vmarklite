@@ -1,14 +1,12 @@
 //! App Paths - Centralized path management for Tauri app data.
 //!
 //! Provides:
-//! - Port file path resolution for MCP bridge
 //! - Legacy ~/.vmark/ directory cleanup
 //! - Atomic file operations to prevent race conditions
 
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use tauri::Manager;
 
 // ============================================================================
 // Constants
@@ -26,12 +24,6 @@ const LEGACY_MCP_SETTINGS_FILE: &str = "mcp-settings.json";
 // ============================================================================
 // Public API (Tauri-dependent)
 // ============================================================================
-
-/// Get the path to the port file in the app data directory.
-pub fn get_port_file_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    Ok(app_data.join(MCP_PORT_FILE))
-}
 
 /// Best-effort cleanup of legacy ~/.vmark/ directory.
 /// Removes obsolete files (bootstrap, port, settings) and the directory itself if empty.
